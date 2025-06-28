@@ -521,6 +521,9 @@
         let totalRepeats = 0;
         let isInGap = false;
         let gapTime = 0;
+
+        // Wake Lock API variables
+        let wakeLock = null;
         
         // Speech synthesis
         const speech = window.speechSynthesis;
@@ -652,12 +655,38 @@
             
             announcementList.prepend(announcementItem);
         }
+
+        // Request a wake lock
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock acquired!');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen Wake Lock released!');
+                    });
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                }
+            } else {
+                console.warn('Wake Lock API not supported by this browser.');
+            }
+        }
+
+        // Release the wake lock
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+        }
         
         // Start the timer sequence
         function startTimerSequence() {
             if (currentTimerIndex >= timers.length) {
                 speak("All timers completed. Great job!");
                 isRunning = false;
+                releaseWakeLock(); // Release wake lock when all timers are done
                 return;
             }
             
@@ -677,7 +706,7 @@
                 speak(`Starting Timer of ${formatTimeForSpeech(timer.duration)}`);
             } else { // For subsequent repeats of the same timer type
                 timerState.textContent = `Timer ${currentTimerIndex + 1} is running`;
-                speak("Time Started"); 
+                speak("Time Started");  
             }
 
             updateTimerDisplay();
@@ -686,6 +715,7 @@
                 isRunning = true;
                 startCountdown();
             }
+            requestWakeLock(); // Request wake lock when a timer starts
         }
         
         // Start gap period
@@ -697,7 +727,7 @@
             
             // MODIFIED: Announcement for gap time
             timerState.textContent = `Buffer time`;
-            speak("Time's Up, Buffer Time"); 
+            speak("Time's Up, Buffer Time");  
             updateTimerDisplay();
         }
         
@@ -778,6 +808,7 @@
                 timerState.textContent = isInGap ? 
                     `Buffer time for Timer ${currentTimerIndex + 1}` : 
                     `Timer ${currentTimerIndex + 1} is running`;
+                requestWakeLock(); // Request wake lock on manual start/resume
             }
         });
         
@@ -785,6 +816,7 @@
             isRunning = false;
             timerState.textContent = "Timer paused";
             if (timerInterval) clearInterval(timerInterval);
+            releaseWakeLock(); // Release wake lock when paused
         });
         
         resetBtn.addEventListener('click', function() {
@@ -793,6 +825,7 @@
             currentTimerIndex = 0;
             currentRepeat = 0;
             startTimerSequence();
+            releaseWakeLock(); // Release wake lock on reset (and it will be re-acquired if starting again)
         });
         
         backBtn.addEventListener('click', function() {
@@ -800,6 +833,7 @@
             if (timerInterval) clearInterval(timerInterval);
             timerPage.style.display = 'none';
             setupPage.style.display = 'block';
+            releaseWakeLock(); // Release wake lock when going back to setup
         });
         
         // Initialize timer display
